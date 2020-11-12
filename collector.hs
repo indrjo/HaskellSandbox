@@ -15,7 +15,7 @@ import System.Exit                (die)
 
 main :: IO ()
 main = parseArgs [ ("--n", addNewDataTo =<< getDataFile)
-                 , ("--s", getSumFrom =<< getDataFile)
+                 , ("--s", printTotalAmountOf =<< getDataFile)
                  ] (die "no option provided!")
 
 -- *** options handling ***
@@ -53,8 +53,8 @@ addNewDataTo file = appendFile file =<< liftM2 (++) newLn getLine
     newLn = ifM (doesFileExist file) (return "\n") (return "")
 
 -- *** getting the total amount ***
-getSumFrom :: FilePath -> IO ()
-getSumFrom file = print =<< liftM sum (getEurosFrom file)
+printTotalAmountOf :: FilePath -> IO ()
+printTotalAmountOf file = print =<< liftM sum (getEurosFrom file)
   where
     getEurosFrom :: FilePath -> IO [Double]
     getEurosFrom = liftM (map (read . trim . after '€')) . getLines
