@@ -14,8 +14,8 @@ import System.Directory           (doesFileExist)
 import System.Exit                (die)
 
 main :: IO ()
-main = parseArgs [ ("--n", addNewDataTo =<< getDataFile)
-                 , ("--s", printTotalAmountOf =<< getDataFile)
+main = parseArgs [ ("--new", addNewDataTo =<< getDataFile)
+                 , ("--sum", printTotalAmount =<< getDataFile)
                  ] (die "no option provided!")
 
 -- *** options handling ***
@@ -26,22 +26,20 @@ parseArgs ((str, io):xs) def = ifM (isOpt str) io (parseArgs xs def)
     isOpt :: String -> IO Bool
     isOpt str = liftM (elem str) getArgs 
 
-getCmdLnValOf :: String -> IO (Maybe String)
-getCmdLnValOf str = liftM (listToMaybe . after str) getArgs
+getValueOf :: String -> IO (Maybe String)
+getValueOf str = liftM (listToMaybe . after str) getArgs
 
 -- *** getting files to store datas ***
 getDataFile :: IO FilePath
 getDataFile = liftM2 (</>) getDefDir (liftM (<.> "dat") getYear)
   where
     getDefDir :: IO FilePath
-    getDefDir = liftM2 fromMaybe
-                  (liftM (</> "datas") getProgPath)
-                  (getCmdLnValOf "--d")
+    getDefDir = liftM2 fromMaybe getProgPath (getValueOf "--dir")
     getYear :: IO String
-    getYear = liftM2 fromMaybe getThisYear (getCmdLnValOf "--y")
+    getYear = liftM2 fromMaybe getCurrentYear (getValueOf "--year")
       where
-        getThisYear :: IO String
-        getThisYear = do
+        getCurrentYear :: IO String
+        getCurrentYear = do
             (y, _, _) <- liftM (toGregorian . utctDay) getCurrentTime
             return (show y)         
 
@@ -53,8 +51,8 @@ addNewDataTo file = appendFile file =<< liftM2 (++) newLn getLine
     newLn = ifM (doesFileExist file) (return "\n") (return "")
 
 -- *** getting the total amount ***
-printTotalAmountOf :: FilePath -> IO ()
-printTotalAmountOf file = print =<< liftM sum (getEurosFrom file)
+printTotalAmount :: FilePath -> IO ()
+printTotalAmount file = print =<< liftM sum (getEurosFrom file)
   where
     getEurosFrom :: FilePath -> IO [Double]
     getEurosFrom = liftM (map (read . trim . after '€')) . getLines
