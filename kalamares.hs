@@ -18,6 +18,8 @@ main = do
 
 type FilePath2 = (FilePath, FilePath)
 
+-- CORE FUNCTIONS
+
 makeCopies :: [FilePath2] -> IO ()
 makeCopies [] = info "no action to perform!"
 makeCopies xs = mapM_ (uncurry copyToDir) xs
