@@ -16,9 +16,8 @@ main = do
       (makeCopies =<< getCouplesFrom this)
       (fatal $ "\'" ++ this ++ "\' does not exist!")
 
-type FilePath2 = (FilePath, FilePath)
-
 -- CORE FUNCTIONS
+type FilePath2 = (FilePath, FilePath)
 
 makeCopies :: [FilePath2] -> IO ()
 makeCopies [] = info "no action to perform!"
