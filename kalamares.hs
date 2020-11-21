@@ -1,44 +1,43 @@
 
-import Control.Monad (liftM)
+import Control.Monad       (liftM)
 import Control.Conditional (ifM)
-
-import Data.Maybe (listToMaybe, fromMaybe)
-import Data.List.Extra (trim)
-
-import System.Environment (getArgs)
-import System.Process (callCommand)
-import System.Directory (doesFileExist)
-import System.FilePath ((</>))
-import System.Exit (die)
+import Data.Maybe          (listToMaybe, fromMaybe)
+import Data.List.Extra     (trim)
+import System.Environment  (getArgs)
+import System.Process      (callCommand)
+import System.Directory    (doesFileExist)
+import System.FilePath     ((</>))
+import System.Exit         (die)
 
 main :: IO ()
-main = kalamares =<< getPathCouplesFrom =<< getValOfOrDie "--use"
+main = do
+    this <- getValOfOrDie "--use"  
+    ifM (doesFileExist this)
+      (makeCopies =<< getCouplesFrom this)
+      (fatal $ "\'" ++ this ++ "\' does not exist!")
 
-kalamares :: [(FilePath, FilePath)] -> IO ()
-kalamares [] = info "no action to perform!"
-kalamares xs = mapM_ (uncurry copyToDir) xs
+type FilePath2 = (FilePath, FilePath)
+
+makeCopies :: [FilePath2] -> IO ()
+makeCopies [] = info "no action to perform!"
+makeCopies xs = mapM_ (uncurry copyToDir) xs
   where
     copyToDir :: FilePath -> FilePath -> IO ()
     copyToDir a b = do
-        putStrLn  $ " " ++ a ++ " -> " ++ b 
+        putStrLn  $ " " ++ a ++ " -> " ++ b ++ " ..."
         callCommand $
           "mkdir -p " ++ b ++ "; cp -ru " ++ a ++ " " ++ b 
 
-getPathCouplesFrom :: FilePath -> IO [(FilePath, FilePath)] 
-getPathCouplesFrom file = do
-    start <- getValOfOrDie "--start"
-    end   <- getValOfOrDie "--end"
-    ifM (doesFileExist file)
-      (liftM (map $ couple start end) (getMeaningfulLinesOf file))
-      (die $ "\'" ++ file ++ "\' does not exist!")
+getCouplesFrom :: FilePath -> IO [FilePath2] 
+getCouplesFrom file = do
+    a <- getValOfOrDie "--start"
+    b <- getValOfOrDie "--end"
+    liftM (map $ addPrefixes a b) (getMeaningfulLinesOf file)
   where
-    couple :: FilePath -> FilePath -> String -> (FilePath, FilePath)
-    couple p q = prefix p q . chop
+    addPrefixes :: FilePath -> FilePath -> String -> FilePath2
+    addPrefixes p q = (\(x, y) -> (p </> x, q </> y)) . chop
       where
-        prefix :: FilePath -> FilePath -> (FilePath, FilePath)
-          -> (FilePath, FilePath)
-        prefix p q (a, b) = (p </> a, q </> b)
-        chop :: String -> (FilePath, FilePath)
+        chop :: String -> FilePath2
         chop str = (h '>' str, k '>' str)
           where
             h, k :: Char -> String -> String
@@ -57,12 +56,6 @@ getPathCouplesFrom file = do
 isOpt :: String -> IO Bool
 isOpt x = liftM (elem x) getArgs
 
-getValOf :: String -> IO (Maybe String)
-getValOf str = liftM (next str) getArgs
-  where
-    next :: Eq a => a -> [a] -> Maybe a
-    next x = listToMaybe . dropWhile (== x) . dropWhile (/= x)
-
 getValOfOrDie :: String -> IO String
 getValOfOrDie key = do
     a <- getValOf key
@@ -71,6 +64,12 @@ getValOfOrDie key = do
       _      -> ifM (isOpt "--use")
                   (fatal $ "\'" ++ key ++ "\' needs a value!")
                   (fatal $ "provide \'" ++ key ++ "\' with an option!")
+  where
+    getValOf :: String -> IO (Maybe String)
+    getValOf x = liftM (next x) getArgs
+      where
+        next :: Eq s => s -> [s] -> Maybe s
+        next c = listToMaybe . dropWhile (== c) . dropWhile (/= c)
 
 -- MESSAGES FROM THE PROGRAM
 info :: String -> IO ()
@@ -78,3 +77,4 @@ info = putStrLn . (" INFO: " ++)
 
 fatal :: String -> IO a
 fatal = die . (" ERROR: " ++)
+
