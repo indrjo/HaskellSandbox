@@ -1,49 +1,63 @@
 
-import Control.Monad       (liftM)
+import Control.Monad       (liftM, forM_)
 import Control.Conditional (ifM)
-import Data.Maybe          (listToMaybe, fromMaybe)
 import Data.List.Extra     (trim)
 import System.Environment  (getArgs)
-import System.Process      (callCommand)
-import System.Directory    (doesFileExist)
 import System.FilePath     ((</>))
-import System.Exit         (die)
+import System.Directory    (doesFileExist)
+import System.Process      (callCommand)
 
 main :: IO ()
 main = do
-    this <- getValOfOrDie "--use"  
-    ifM (doesFileExist this)
-      (makeCopies =<< getCouplesFrom this)
-      (fatal $ "\'" ++ this ++ "\' does not exist!")
+  files <- getArgs
+  if null files
+    then
+      putStrLn " *** provide some file to parse!"
+    else
+      forM_ files $ \f -> do
+        existence <- doesFileExist f
+        if existence
+          then do
+            putStrLn $ " *** reading \'" ++ f ++ "\'..."
+            kalamares f
+          else
+            putStrLn $ " *** \'" ++ f ++ "\' does not exist!"
 
--- CORE FUNCTIONS
-type FilePath2 = (FilePath, FilePath)
+-- kalamares data
+data Kalamares = Base FilePath FilePath
+               | Copy FilePath FilePath
+               | Unknown String
 
-makeCopies :: [FilePath2] -> IO ()
-makeCopies [] = info "no action to perform!"
-makeCopies xs = mapM_ (uncurry copyToDir) xs
+-- turn a string into a kalamares data
+toKal :: String -> Kalamares
+toKal str
+    | elem '@' str = let (p1, p2) = chop '@' str in Base p1 p2
+    | elem '>' str = let (p1, p2) = chop '>' str in Copy p1 p2
+    | otherwise    = Unknown str
   where
-    copyToDir :: FilePath -> FilePath -> IO ()
-    copyToDir a b = do
-        putStrLn  $ " " ++ a ++ " -> " ++ b ++ " ..."
-        callCommand $
-          "mkdir -p " ++ b ++ "; cp -ru " ++ a ++ " " ++ b 
+    chop :: Char -> String -> (String, String)
+    chop c str = (trim a, trim . drop 1 $ b)
+      where (a, b) = span (/= c) str
 
-getCouplesFrom :: FilePath -> IO [FilePath2] 
-getCouplesFrom file = do
-    a <- getValOfOrDie "--start"
-    b <- getValOfOrDie "--end"
-    liftM (map $ addPrefixes a b) (getMeaningfulLinesOf file)
+-- *** core functions ***
+-- "kalamares" is the core function: takes a file and parses it.
+kalamares :: FilePath -> IO ()
+kalamares f = helper "" "" =<< getMeaningfulLinesOf f
   where
-    addPrefixes :: FilePath -> FilePath -> String -> FilePath2
-    addPrefixes p q = (\(x, y) -> (p </> x, q </> y)) . chop
-      where
-        chop :: String -> FilePath2
-        chop str = (h '>' str, k '>' str)
-          where
-            h, k :: Char -> String -> String
-            h c = trim . takeWhile (/= c) 
-            k c = trim . dropWhile (== c) . dropWhile (/= c)
+    -- This helper function is the actual parser. Takes a line at time, blows 
+    -- it up with the "toKal" function and decide what to do.
+    helper :: FilePath -> FilePath -> [String] -> IO ()
+    helper _ _ []     = return ()
+    helper p q (x:xs) = case toKal x of
+        Base a b  -> helper a b xs
+        Copy a b  -> do
+            copy (p </> a) (q </> b)
+            helper p q xs
+        Unknown c -> do
+            putStrLn $ " *** \'" ++ c ++ "\': what do you want me to do?"
+            helper p q xs  
+    -- Get all meaningful lines from a file. Here, "meaningful" stands for
+    -- "neither blank line nor line which starts with '#'".
     getMeaningfulLinesOf :: FilePath -> IO [String]
     getMeaningfulLinesOf = liftM (filter isMeaningful . lines) . readFile
       where
@@ -53,29 +67,13 @@ getCouplesFrom file = do
         isMeaningful (' ':str) = isMeaningful str
         isMeaningful _         = True
 
--- OPTIONS HANDLING
-isOpt :: String -> IO Bool
-isOpt x = liftM (elem x) getArgs
+-- *** functions to re-implement ***
+copy :: FilePath -> FilePath -> IO ()
+copy a b = do
+    callCommand $ "mkdir -p " ++ b
+    callCommand $ "cp -ruv " ++ a ++ " " ++ b
 
-getValOfOrDie :: String -> IO String
-getValOfOrDie key = do
-    a <- getValOf key
-    case a of
-      Just b -> return b
-      _      -> ifM (isOpt "--use")
-                  (fatal $ "\'" ++ key ++ "\' needs a value!")
-                  (fatal $ "provide \'" ++ key ++ "\' with an option!")
-  where
-    getValOf :: String -> IO (Maybe String)
-    getValOf x = liftM (next x) getArgs
-      where
-        next :: Eq s => s -> [s] -> Maybe s
-        next c = listToMaybe . dropWhile (== c) . dropWhile (/= c)
-
--- MESSAGES FROM THE PROGRAM
-info :: String -> IO ()
-info = putStrLn . (" INFO: " ++)
-
-fatal :: String -> IO a
-fatal = die . (" ERROR: " ++)
+-- *** function yet to implement ***
+move :: FilePath -> FilePath -> IO ()
+move = undefined
 
