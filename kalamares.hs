@@ -76,30 +76,3 @@ copy a b = do
 move :: FilePath -> FilePath -> IO ()
 move = undefined
 
-{-kalamares :: FilePath -> IO ()
-kalamares f = helper "" "" 0 =<< getMeaningfulLinesOf f
-  where
-    -- This helper function is the actual parser. Takes a line at time, blows 
-    -- it up with the "toKal" function and decide what to do.
-    helper :: FilePath -> FilePath -> Int -> [String] -> IO ()
-    helper _ _ _ []     = return ()
-    helper p q n (x:xs) = case toKal x of
-        Base a b  -> helper a b (n+1) xs
-        Copy a b  -> do
-            copy (p </> a) (q </> b)
-            helper p q (n+1) xs
-        Unknown c -> do
-            say $ "[ " ++ f ++ " at line " ++ show n ++ " ] \'" ++ c ++
-                  "\': what do you want me to do here?"
-            helper p q (n+1) xs  
-    -- Get all meaningful lines from a file. Here, "meaningful" stands for
-    -- "neither blank line nor line which starts with '#'".
-    getMeaningfulLinesOf :: FilePath -> IO [String]
-    getMeaningfulLinesOf = liftM (filter isMeaningful . lines) . readFile
-      where
-        isMeaningful :: String -> Bool
-        isMeaningful ""        = False
-        isMeaningful ('#':_ )  = False
-        isMeaningful (' ':str) = isMeaningful str
-        isMeaningful _         = True-}
-
