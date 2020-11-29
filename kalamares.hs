@@ -1,9 +1,6 @@
 
-{-
-  *** Description yet to come... ***
--}
+{- Description yet to come... -}
 
-import Control.Monad       (liftM)
 import Control.Conditional (ifM)
 import Data.List.Extra     (trim)
 import System.Environment  (getArgs)
@@ -14,12 +11,56 @@ import System.Process      (callCommand)
 main :: IO ()
 main = mapM_ kalamares =<< getArgs
 
--- kalamares data
-data Kalamares = NotToParse
-               | FT FilePath FilePath
-               | CP FilePath FilePath
-               | MV FilePath FilePath
-               | IDK String
+-- Kalamares data
+data Kalamares = NotToParse           -- things not to parse
+               | FT FilePath FilePath -- rebase action
+               | CP FilePath FilePath -- copying things
+               | MV FilePath FilePath -- moving things
+               | IDK String           -- "I don't know"
+
+-- *** core functions ***
+
+-- kalamares is the heart of this program. It takes a file: if it exists, it
+-- is parsed, otherwise you are said it does not exist.
+-- Actually, no error or failure-exit-code is thrown, you are simply alerted 
+-- through the standard output channel. Mind that feature!
+kalamares :: FilePath -> IO ()
+kalamares f = ifM (doesFileExist f) (parseLines =<< getLinesOf f)
+                  (say $ "\'" ++ f ++ "\' does not exist!")
+  where
+    -- This following function is the actual parser. Takes a line at time, 
+    -- blows it up with the "kal" function and decide what to do with it.
+    parseLines :: [String] -> IO ()
+    parseLines = parseH "" "" 1
+      where
+        parseH :: FilePath -> FilePath -> Int -> [String] -> IO ()
+        parseH _ _ _ []     = return ()
+        parseH p q n (x:xs) = case kal x of
+            -- If a line is not to parse, go ahead. Here "lines not to parse"
+            -- are blank lines or comments (a comment is exactly whatever piece
+            -- of line starts with '#').
+            NotToParse -> parseH p q (n+1) xs
+            -- Change the bases.
+            FT p' q'   -> parseH p' q' (n+1) xs
+            -- Copy something into something else.
+            CP a b     -> do
+                cp (p </> a) (q </> b)
+                parseH p q (n+1) xs
+            -- Move something into something else.
+            MV a b     -> do
+                mv (p </> a) (q </> b)
+                parseH p q (n+1) xs
+            -- "I don't know" lines: kalamares alerts you whether there is
+            -- a line it hasn't fully understood. You are also reported where
+            -- ambiguous lines lie (the "*.kal" file and the line, which is
+            -- nice if several files are given at once to kalamares). 
+            IDK c      -> do 
+                say $ "[" ++ f ++ ", " ++ show n  ++ "] \'" ++ c ++
+                      "\': what do you expect me to do with that?"
+                parseH p q (n+1) xs
+    -- That function takes a filepath and throws out the IO list of its lines.
+    getLinesOf :: FilePath -> IO [String]
+    getLinesOf = fmap lines . readFile    
 
 -- turn a string into a kalamares data
 kal :: String -> Kalamares
@@ -39,39 +80,19 @@ kal str
       where
         (a, b) = span (/= c) . takeWhile (/= '#') $ str
 
--- *** core functions ***
--- "kalamares" is the core function: takes a file and parses it.
-kalamares :: FilePath -> IO ()
-kalamares f = ifM (doesFileExist f)
-    (kalamaresH =<< liftM lines (readFile f))
-    (say $ "\'" ++ f ++ "\' does not exist!")
-  where
-    -- This helper function is the actual parser. Takes a line at time, blows 
-    -- it up with the "toKal" function and decide what to do.
-    kalamaresH :: [String] -> IO ()
-    kalamaresH = helper "" "" 1
-      where
-        helper :: FilePath -> FilePath -> Int -> [String] -> IO ()
-        helper _ _ _ []     = return ()
-        helper p q n (x:xs) = case kal x of
-            NotToParse -> helper p q (n+1) xs
-            FT p' q'   -> helper p' q' (n+1) xs
-            CP a b     -> do { cp (p </> a) (q </> b); helper p q (n+1) xs }
-            MV a b     -> do { mv (p </> a) (q </> b); helper p q (n+1) xs }
-            IDK c      -> say $ "[" ++ f ++ ", " ++ show n  ++ "] \'" ++ c ++
-                                "\': what do you expect me to do with that?"
-
--- *** comunicate with the outside world ***
+-- communicate with the outside world
 say :: String -> IO ()
 say = putStrLn . (" *** " ++)
 
--- *** functions to re-implement ***
+-- *** unix-ish functions ***
+
+-- copy
 cp :: FilePath -> FilePath -> IO ()
 cp a b = do
     callCommand $ "mkdir -p " ++ b
     callCommand $ "cp -ruv " ++ a ++ " " ++ b
 
--- *** function yet to implement ***
+-- move
 mv :: FilePath -> FilePath -> IO ()
 mv a b = callCommand $ "mv " ++ a ++ " " ++ b
 
