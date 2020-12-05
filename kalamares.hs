@@ -1,98 +1,106 @@
+#!/usr/bin/env runghc
 
-{- Description yet to come... -}
-
-import Control.Conditional (ifM)
 import Data.List.Extra     (trim)
-import System.Environment  (getArgs)
+import Control.Conditional (ifM, unless)
+import System.IO           (hPutStr, hPutStrLn, stderr)
 import System.FilePath     ((</>))
 import System.Directory    (doesFileExist)
-import System.Process      (callCommand)
+import System.Process      (readCreateProcessWithExitCode, shell)
+import System.Exit         (ExitCode(..))
+import System.Environment  (getArgs)
 
+-- kalamares is both the name of the program you are reading and of its core
+-- function. The program kalamares is basically intended for command line usage.
+-- You can '$ runghc kalamares.hs' or compile this file and run it. The function
+-- kalamares basically reads a file and does something.
+
+-- The main is very small and quite simple: just pass the files you want this
+-- program to parse via command-line as arguments.
 main :: IO ()
 main = mapM_ kalamares =<< getArgs
 
+-- Blank lines are not taken into account; lines whose first non ' ' character
+-- is '#' is considered a comment: they are ignored too.
+isNotToParse :: String -> Bool
+isNotToParse str = case dropWhile (== ' ') str of
+    a:_ -> if a == '#' then True else False
+    _   -> True
+
 -- Kalamares data
-data Kalamares = NotToParse           -- things not to parse
-               | FT FilePath FilePath -- rebase action
+data Kalamares = FT FilePath FilePath -- rebase action
                | CP FilePath FilePath -- copying things
                | MV FilePath FilePath -- moving things
                | IDK String           -- "I don't know"
 
--- *** core functions ***
-
--- kalamares is the heart of this program. It takes a file: if it exists, it
--- is parsed, otherwise you are said it does not exist.
--- Actually, no error or failure-exit-code is thrown, you are simply alerted 
--- through the standard output channel. Mind that feature!
-kalamares :: FilePath -> IO ()
-kalamares f = ifM (doesFileExist f) (parseLines =<< getLinesOf f)
-                  (say $ "\'" ++ f ++ "\' does not exist!")
+-- Turn a string into a kalamares data.
+toKalamares :: String -> Kalamares
+toKalamares str
+    | elem '&' str = let (p1, p2) = chop '&' str in FT p1 p2
+    | elem '>' str = let (p1, p2) = chop '>' str in CP p1 p2
+    | elem '@' str = let (p1, p2) = chop '@' str in MV p1 p2
+    | otherwise    = IDK (trim str)
   where
-    -- This following function is the actual parser. Takes a line at time, 
-    -- blows it up with the "kal" function and decide what to do with it.
-    parseLines :: [String] -> IO ()
-    parseLines = parseH "" "" 1
-      where
-        parseH :: FilePath -> FilePath -> Int -> [String] -> IO ()
-        parseH _ _ _ []     = return ()
-        parseH p q n (x:xs) = case kal x of
-            -- If a line is not to parse, go ahead. Here "lines not to parse"
-            -- are blank lines or comments (a comment is exactly whatever piece
-            -- of line starts with '#').
-            NotToParse -> parseH p q (n+1) xs
-            -- Change the bases.
-            FT p' q'   -> parseH p' q' (n+1) xs
-            -- Copy something into something else.
-            CP a b     -> do
-                cp (p </> a) (q </> b)
-                parseH p q (n+1) xs
-            -- Move something into something else.
-            MV a b     -> do
-                mv (p </> a) (q </> b)
-                parseH p q (n+1) xs
-            -- "I don't know" lines: kalamares alerts you whether there is
-            -- a line it hasn't fully understood. You are also reported where
-            -- ambiguous lines lie (the "*.kal" file and the line, which is
-            -- nice if several files are given at once to kalamares). 
-            IDK c      -> do 
-                say $ "[" ++ f ++ ", " ++ show n  ++ "] \'" ++ c ++
-                      "\': what do you expect me to do with that?"
-                parseH p q (n+1) xs
-    -- That function takes a filepath and throws out the IO list of its lines.
-    getLinesOf :: FilePath -> IO [String]
-    getLinesOf = fmap lines . readFile    
-
--- turn a string into a kalamares data
-kal :: String -> Kalamares
-kal str
-    | isNotToParse str = NotToParse
-    | elem '&' str     = let (p1, p2) = chop '&' str in FT p1 p2
-    | elem '>' str     = let (p1, p2) = chop '>' str in CP p1 p2
-    | elem '@' str     = let (p1, p2) = chop '@' str in MV p1 p2
-    | otherwise        = IDK (trim str)
-  where
-    isNotToParse :: String -> Bool
-    isNotToParse str = case dropWhile (== ' ') str of
-        (x:_) -> if x == '#' then True else False
-        []    -> True
+    -- chop takes a string: an eventual piece which starts with '#' is left out
+    -- and then the remaining part is chopped once a given char is met. 
     chop :: Char -> String -> (String, String)
-    chop c str = (trim a, trim . drop 1 $ b)
+    chop c = chopH . takeWhile (/= '#')
       where
-        (a, b) = span (/= c) . takeWhile (/= '#') $ str
+        chopH :: String -> (String, String)
+        chopH xs = (p xs, q xs)
+          where
+            p, q :: String -> String
+            p = trim . takeWhile (/= c)
+            q = trim . drop 1 . dropWhile (/= c)
 
--- communicate with the outside world
-say :: String -> IO ()
-say = putStrLn . (" *** " ++)
+-- kalamares is the heart of this program. It takes a file: if it exists, it is
+-- parsed, otherwise you are said it does not exist.
+kalamares :: FilePath -> IO ()
+kalamares f = ifM (doesFileExist f)
+    (parseLines . lines =<< readFile f)
+    (warn $ "\'" ++ f ++ "\' does not exist!")
+  where
+    -- This following function is the actual parser. Takes a line at time, blows
+    -- it up with the "kal" function and decide what to do with it.
+    parseLines :: [String] -> IO ()
+    parseLines = parseH 1 "" ""
+      where
+        parseH :: Int -> FilePath -> FilePath -> [String] -> IO ()
+        parseH _ _ _ []     = return ()
+        parseH n p q (x:xs)
+            | isNotToParse x = parseH (n+1) p q xs 
+            | otherwise = case toKalamares x of
+                -- Change the bases.
+                FT s t -> parseH (n+1) s t xs
+                -- Copy something into something else.
+                CP a b -> do exec $ "cp -ruv " ++ p </> a ++ " " ++ q </> b
+                             parseH (n+1) p q xs
+                -- Move something into something else.
+                MV a b -> do exec $ "mv " ++ p </> a ++ " " ++ q </> b
+                             parseH (n+1) p q xs
+                -- "I don't know" lines: kalamares alerts you whether there is
+                -- a line it hasn't fully understood; you are also told where
+                -- ambiguous lines lie. 
+                IDK c  -> do warn $ "(" ++ f ++ ", line " ++ show n ++ ")"
+                                      ++ " \'" ++ c ++ "\': "
+                                      ++ "what do you expect me to do?"
+                             parseH (n+1) p q xs
+          where
+            -- exec is a wrapper of Unix commands. It never stops the running
+            -- of kalamares because of errors may arise from them, just absorb
+            -- exceptions and alert when something goes wrong.
+            exec :: String -> IO ()
+            exec cmd = do
+                putStrLn $ "[running] \'" ++ cmd ++ "\'... "
+                (exitCode, _, errMsg) <-
+                    readCreateProcessWithExitCode (shell cmd) ""
+                unless (exitCode == ExitSuccess)
+                    (hPutStr stderr . h $ errMsg)
+              where
+                h :: String -> String
+                h str = "[" ++ f ++ " at line " ++ show n ++ "]"
+                        ++ (drop 1 . dropWhile (/= ':') $ str)
 
--- *** unix-ish functions ***
-
--- copy
-cp :: FilePath -> FilePath -> IO ()
-cp a b = do
-    callCommand $ "mkdir -p " ++ b
-    callCommand $ "cp -ruv " ++ a ++ " " ++ b
-
--- move
-mv :: FilePath -> FilePath -> IO ()
-mv a b = callCommand $ "mv " ++ a ++ " " ++ b
+-- warnings
+warn :: String -> IO ()
+warn str = hPutStrLn stderr $ " *** " ++ str
 
