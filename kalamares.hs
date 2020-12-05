@@ -80,7 +80,7 @@ kalamares f = ifM (doesFileExist f)
                 -- "I don't know" lines: kalamares alerts you whether there is
                 -- a line it hasn't fully understood; you are also told where
                 -- ambiguous lines lie. 
-                IDK c  -> do warn $ "(" ++ f ++ ", line " ++ show n ++ ")"
+                IDK c  -> do warn $ "[" ++ f ++ " at line " ++ show n ++ "]"
                                       ++ " \'" ++ c ++ "\': "
                                       ++ "what do you expect me to do?"
                              parseH (n+1) p q xs
