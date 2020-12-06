@@ -9,10 +9,12 @@ import System.Process      (readCreateProcessWithExitCode, shell)
 import System.Exit         (ExitCode(..))
 import System.Environment  (getArgs)
 
--- kalamares is both the name of the program you are reading and of its core
--- function. The program kalamares is basically intended for command line usage.
--- You can '$ runghc kalamares.hs' or compile this file and run it. The function
--- kalamares basically reads a file and does something.
+-- kalamares is both the name of this progaram and of its core function. The
+-- program kalamares is basically intended for command line usage. You can
+-- simply issue
+--   $ runghc kalamares.hs
+-- and things work or compile this file and run it. The function kalamares
+-- basically reads a file and does something.
 
 -- The main is very small and quite simple: just pass the files you want this
 -- program to parse via command-line as arguments.
@@ -81,25 +83,28 @@ kalamares f = ifM (doesFileExist f)
                 -- a line it hasn't fully understood; you are also told where
                 -- ambiguous lines lie. 
                 IDK c  -> do warn $ "[" ++ f ++ " at line " ++ show n ++ "]"
-                                      ++ " \'" ++ c ++ "\': "
-                                      ++ "what do you expect me to do?"
+                                    ++ " \'" ++ c ++ "\': "
+                                    ++ "what do you expect me to do?"
                              parseH (n+1) p q xs
           where
-            -- exec is a wrapper of Unix commands. It never stops the running
-            -- of kalamares because of errors may arise from them, just absorb
-            -- exceptions and alert when something goes wrong.
+            -- exec is the wrapper of unix commands used here.
             exec :: String -> IO ()
             exec cmd = do
+                -- Say which command the program is executing.
                 putStrLn $ "[running] \'" ++ cmd ++ "\'... "
+                -- Get exit code and error messages may arise.
                 (exitCode, _, errMsg) <-
                     readCreateProcessWithExitCode (shell cmd) ""
+                -- If a non zero exit code is thrown, simply inform the user
+                -- with the error message comes from that command and go ahead:
+                -- never stop because those errors. 
                 unless (exitCode == ExitSuccess)
                     (hPutStr stderr . h $ errMsg)
               where
                 h :: String -> String
                 h str = "[" ++ f ++ " at line " ++ show n ++ "]"
                         ++ (drop 1 . dropWhile (/= ':') $ str)
-
+                
 -- warnings
 warn :: String -> IO ()
 warn str = hPutStrLn stderr $ " *** " ++ str
