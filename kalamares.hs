@@ -102,7 +102,7 @@ kalamares f = ifM (doesFileExist f)
 
 -- Warn users.
 warn :: String -> IO ()
-warn str = hPutStrLn stderr str
+warn = hPutStrLn stderr
 
 -- Replacement using regexes.
 rep :: String -> String -> String -> String
