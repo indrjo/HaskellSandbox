@@ -34,15 +34,15 @@ toKalamares str
     | elem '&' str = let (p1, p2) = chop '&' str in FT p1 p2
     | elem '>' str = let (p1, p2) = chop '>' str in CP p1 p2
     | elem '@' str = let (p1, p2) = chop '@' str in MV p1 p2
-    | otherwise    = IDK . trim . rep "\\s*#.*$" "" $ str
+    | otherwise    = IDK . rep "^\\s*$" . rep "\\s*#.*$" $ str
   where
     -- chop takes a string: an eventual piece which starts with '#' is left out
     -- and then the remaining part is chopped once a given char is met. 
     chop :: Char -> String -> (String, String)
-    chop c = snap . rep "\\s*#.*$" ""
+    chop c = snap . rep "\\s*#.*$"
       where
         snap :: String -> (String, String)
-        snap xs = (trim a, trim b)
+        snap xs = (rep "^\\s*|\\s*$" a, rep "^\\s*|\\s*$" b)
           where
             a:b:_ = splitRegex (mkRegex $ "\\s*" ++ c:"\\s*") xs
 
@@ -88,7 +88,7 @@ kalamares f = ifM (doesFileExist f)
             exec :: String -> IO ()
             exec cmd = do
                 -- Say which command the program is executing.
-                putStrLn $ "[running] \'" ++ cmd ++ "\' ... "
+                putStrLn $ "[running] \'" ++ cmd ++ "\'"
                 -- Get exit code and error messages may arise.
                 (e, _, err) <- readCreateProcessWithExitCode (shell cmd) ""
                 -- If a non zero exit code is thrown, simply inform the user
@@ -98,17 +98,13 @@ kalamares f = ifM (doesFileExist f)
               where
                 format :: String -> String
                 format str = "[" ++ f ++ " at line " ++ show n ++ "] "
-                             ++ (rep "^[^:]*:\\s*" "" . trim) str
+                             ++ (rep "^[^:]*:\\s*" . rep "^\\s*|\\s*$") str
 
 -- Warn users.
 warn :: String -> IO ()
 warn = hPutStrLn stderr
 
--- Replacement using regexes.
-rep :: String -> String -> String -> String
-rep pat sub str = subRegex (mkRegex pat) str sub
-
--- Removing initial and trailing spaces.
-trim :: String -> String
-trim = rep "^\\s*|\\s*$" ""
+-- Removing parts fron strings using regular expressions.
+rep :: String -> String -> String
+rep pat str = subRegex (mkRegex pat) str ""
 
