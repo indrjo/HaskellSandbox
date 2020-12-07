@@ -53,8 +53,8 @@ kalamares f = ifM (doesFileExist f)
     (parseList . lines =<< readFile f)
     (warn $ "\'" ++ f ++ "\' does not exist!")
   where
-    -- This following function is the actual parser. Takes a line at time,
-    -- blows it up with the "kal" function and decide what to do with it.
+    -- The following function is the actual parser: it takes one string at time
+    -- and decides what to do with it.
     parseList :: [String] -> IO ()
     parseList = parseH 1 "" ""
       where
@@ -74,16 +74,17 @@ kalamares f = ifM (doesFileExist f)
                 -- "I don't know" lines: kalamares alerts you whether there is
                 -- a line it hasn't fully understood; you are also told where
                 -- ambiguous lines lie. 
-                IDK c  -> do warn $ "[" ++ f ++ " at line " ++ show n ++ "]"
-                                    ++ " \'" ++ c ++ "\': "
+                IDK c  -> do warn $ wStart ++ "\'" ++ c ++ "\': "
                                     ++ "what do you expect me to do?"
                              parseH (n+1) p q xs
           where
-            -- Blank lines are not taken into account; lines whose first non 
-            -- ' ' character is '#' is considered a comment: they are ignored
-            -- as well.
+            -- Blank lines are not taken into account. Lines whose first non
+            -- blank char is '#' are ignored as well: use them as comments.
             isNotToParse :: String -> Bool
             isNotToParse str = str =~ "^\\s*#" || str =~ "^\\s*$"
+            -- Every warning should start with that piece: [<file>, line <int>]
+            wStart :: String
+            wStart = "[" ++ f ++ ", line " ++ show n ++ "] "
             -- exec is the wrapper of unix commands used here.
             exec :: String -> IO ()
             exec cmd = do
@@ -97,8 +98,7 @@ kalamares f = ifM (doesFileExist f)
                 unless (e == ExitSuccess) (warn . format $ err)
               where
                 format :: String -> String
-                format str = "[" ++ f ++ " at line " ++ show n ++ "] "
-                             ++ (rep "^[^:]*:\\s*" . rep "^\\s*|\\s*$") str
+                format = (wStart ++) . rep "\\s*$"
 
 -- Warn users.
 warn :: String -> IO ()
@@ -106,5 +106,5 @@ warn = hPutStrLn stderr
 
 -- Removing parts fron strings using regular expressions.
 rep :: String -> String -> String
-rep pat str = subRegex (mkRegex pat) str ""
+rep pat = flip (subRegex (mkRegex pat)) ""
 
