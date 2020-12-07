@@ -89,13 +89,14 @@ kalamares f = ifM (doesFileExist f)
             exec :: String -> IO ()
             exec cmd = do
                 -- Say which command the program is executing.
-                putStrLn $ "[running] \'" ++ cmd ++ "\'"
+                putStrLn $ "[running] " ++ cmd
                 -- Get exit code and error messages may arise.
-                (e, _, err) <- readCreateProcessWithExitCode (shell cmd) ""
+                (exitCode, _, errMsg) <- run cmd
                 -- If a non zero exit code is thrown, simply inform the user
                 -- with the error message comes from that command and go ahead:
                 -- never stop because those errors. 
-                unless (e == ExitSuccess) (warn . format $ err)
+                unless (exitCode == ExitSuccess)
+                    (warn . format $ errMsg)
               where
                 format :: String -> String
                 format = (wStart ++) . rep "\\s*$"
@@ -104,7 +105,11 @@ kalamares f = ifM (doesFileExist f)
 warn :: String -> IO ()
 warn = hPutStrLn stderr
 
--- Removing parts fron strings using regular expressions.
+-- Removing parts from strings using regular expressions.
 rep :: String -> String -> String
 rep pat = flip (subRegex (mkRegex pat)) ""
+
+-- Run system commands.
+run :: String -> IO (ExitCode, String, String)
+run = flip readCreateProcessWithExitCode "" . shell
 
