@@ -5,7 +5,7 @@ import System.IO           (hPutStrLn, stderr)
 import System.FilePath     ((</>))
 import System.Directory    (doesFileExist)
 import System.Process      (readCreateProcessWithExitCode, shell)
-import System.Exit         (ExitCode(..))
+import System.Exit         (ExitCode(..), die)
 import System.Environment  (getArgs)
 import Text.Regex.PCRE     ((=~))
 import Text.Regex          (mkRegex, splitRegex, subRegex)
@@ -20,7 +20,9 @@ import Text.Regex          (mkRegex, splitRegex, subRegex)
 -- The main is very small and quite simple: just pass the files you want this
 -- program to parse via command-line as arguments.
 main :: IO ()
-main = mapM_ kalamares =<< getArgs
+main = ifM (fmap null getArgs)
+    (die "no file provided! doing nothing...")
+    (mapM_ kalamares =<< getArgs)
 
 -- Kalamares data
 data Kalamares = FT FilePath FilePath -- rebase action
@@ -82,7 +84,7 @@ kalamares f = ifM (doesFileExist f)
             -- blank char is '#' are ignored as well: use them as comments.
             isNotToParse :: String -> Bool
             isNotToParse str = str =~ "^\\s*#" || str =~ "^\\s*$"
-            -- Every warning should start with that piece: [<file>, line <int>]
+            -- Every warning should start with the piece [<file>, line <int>]
             wStart :: String
             wStart = "[" ++ f ++ ", line " ++ show n ++ "] "
             -- exec is the wrapper of unix commands used here.
@@ -92,14 +94,11 @@ kalamares f = ifM (doesFileExist f)
                 putStrLn $ "[running] " ++ cmd
                 -- Get exit code and error messages may arise.
                 (exitCode, _, errMsg) <- run cmd
-                -- If a non zero exit code is thrown, simply inform the user
-                -- with the error message comes from that command and go ahead:
-                -- never stop because those errors. 
+                -- If a non zero exit code is thrown, simply inform users with
+                -- the error message comes from that command and go ahead: 
+                -- never stop because those errors.
                 unless (exitCode == ExitSuccess)
-                    (warn . format $ errMsg)
-              where
-                format :: String -> String
-                format = (wStart ++) . rep "\\s*$"
+                    (warn . (++) wStart . rep "\\s*$" $ errMsg)
 
 -- Warn users.
 warn :: String -> IO ()
