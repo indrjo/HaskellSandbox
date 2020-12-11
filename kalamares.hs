@@ -24,13 +24,13 @@ main = ifM (fmap null getArgs)
     (die "no file provided! doing nothing...")
     (mapM_ kalamares =<< getArgs)
 
--- Kalamares data
+-- Kalamares data.
 data Kalamares = FT FilePath FilePath -- rebase action
                | CP FilePath FilePath -- copying things
                | MV FilePath FilePath -- moving things
                | IDK String           -- "I don't know"
 
--- Recognised separators
+-- Recognised separators.
 seps :: String
 seps = "&>@"
 
@@ -109,7 +109,7 @@ warn = hPutStrLn stderr
 rep :: String -> String -> String
 rep pat = flip (subRegex (mkRegex pat)) ""
 
--- Splitting
+-- Splitting.
 spl :: String -> String -> [String]
 spl pat = splitRegex (mkRegex $ "\\s*[" ++ pat ++ "]\\s*")
 
