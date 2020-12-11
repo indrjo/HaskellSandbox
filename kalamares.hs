@@ -1,6 +1,6 @@
 #!/usr/bin/env runghc
 
-import Control.Conditional (ifM, unless)
+import Control.Conditional (ifM, unless, cond)
 import System.IO           (hPutStrLn, stderr)
 import System.FilePath     ((</>))
 import System.Directory    (doesFileExist)
@@ -30,35 +30,36 @@ data Kalamares = FT FilePath FilePath -- rebase action
                | MV FilePath FilePath -- moving things
                | IDK String           -- "I don't know"
 
+-- Recognised separators
+seps :: String
+seps = "&>@"
+
 -- Turn a string into a kalamares data.
 toKalamares :: String -> Kalamares
-toKalamares str
-    | elem '&' str = let (p1, p2) = chop '&' str in FT p1 p2
-    | elem '>' str = let (p1, p2) = chop '>' str in CP p1 p2
-    | elem '@' str = let (p1, p2) = chop '@' str in MV p1 p2
-    | otherwise    = IDK . rep "^\\s*$" . rep "\\s*#.*$" $ str
-  where
-    -- chop takes a string: an eventual piece which starts with '#' is left out
-    -- and then the remaining part is chopped once a given char is met. 
-    chop :: Char -> String -> (String, String)
-    chop c = snap . rep "\\s*#.*$"
-      where
-        snap :: String -> (String, String)
-        snap xs = (rep "^\\s*|\\s*$" a, rep "^\\s*|\\s*$" b)
-          where
-            a:b:_ = splitRegex (mkRegex $ "\\s*" ++ c:"\\s*") xs
+toKalamares str = case (split seps . rep "\\s*#.*$") str of
+    a:b:_ -> let
+                a' = rep "^\\s*|\\s*$" a
+                b' = rep "^\\s*|\\s*$" b
+             in
+                cond [ (elem '&' str, FT a' b')
+                     , (elem '>' str, CP a' b')
+                     , (elem '@' str, MV a' b') ]
+    c:[]  -> let c' = rep "^\\s*|\\s*$" c in IDK c'
+    -- Call on an empty string; that should never happen though...
+    -- Anyway, you are alerted if that happens.
+    _     -> error "toKal applied on an empty string!"
 
 -- kalamares is the heart of this program. It takes a file: if it exists, it is
 -- parsed, otherwise you are said it does not exist.
 kalamares :: FilePath -> IO ()
 kalamares f = ifM (doesFileExist f)
-    (parseList . lines =<< readFile f)
-    (warn $ "\'" ++ f ++ "\' does not exist!")
+    (parse . lines =<< readFile f)
+    (warn $ f ++ " does not exist!")
   where
     -- The following function is the actual parser: it takes one string at time
     -- and decides what to do with it.
-    parseList :: [String] -> IO ()
-    parseList = parseH 1 "" ""
+    parse :: [String] -> IO ()
+    parse = parseH 1 "" ""
       where
         parseH :: Int -> FilePath -> FilePath -> [String] -> IO ()
         parseH _ _ _ []      = return ()
@@ -107,6 +108,11 @@ warn = hPutStrLn stderr
 -- Removing parts from strings using regular expressions.
 rep :: String -> String -> String
 rep pat = flip (subRegex (mkRegex pat)) ""
+
+-- Splitting
+split :: String -> String -> [String]
+--split pat = splitRegex (mkRegex pat)
+split pat = splitRegex (mkRegex $ "\\s*[" ++ pat ++ "]\\s*")
 
 -- Run system commands.
 run :: String -> IO (ExitCode, String, String)
