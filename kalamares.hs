@@ -36,7 +36,7 @@ seps = "&>@"
 
 -- Turn a string into a kalamares data.
 toKalamares :: String -> Kalamares
-toKalamares str = case (split seps . rep "\\s*#.*$") str of
+toKalamares str = case (spl seps . rep "#.*$") str of
     a:b:_ -> let
                 a' = rep "^\\s*|\\s*$" a
                 b' = rep "^\\s*|\\s*$" b
@@ -45,9 +45,9 @@ toKalamares str = case (split seps . rep "\\s*#.*$") str of
                      , (elem '>' str, CP a' b')
                      , (elem '@' str, MV a' b') ]
     c:[]  -> let c' = rep "^\\s*|\\s*$" c in IDK c'
-    -- Call on an empty string; that should never happen though...
-    -- Anyway, you are alerted if that happens.
-    _     -> error "toKal applied on an empty string!"
+    -- Call on an empty string. That case should never occur though. Anyway,
+    -- you are alerted if that happens.
+    []    -> error "toKal applied on an empty string!"
 
 -- kalamares is the heart of this program. It takes a file: if it exists, it is
 -- parsed, otherwise you are said it does not exist.
@@ -110,8 +110,8 @@ rep :: String -> String -> String
 rep pat = flip (subRegex (mkRegex pat)) ""
 
 -- Splitting
-split :: String -> String -> [String]
-split pat = splitRegex (mkRegex $ "\\s*[" ++ pat ++ "]\\s*")
+spl :: String -> String -> [String]
+spl pat = splitRegex (mkRegex $ "\\s*[" ++ pat ++ "]\\s*")
 
 -- Run system commands.
 run :: String -> IO (ExitCode, String, String)
