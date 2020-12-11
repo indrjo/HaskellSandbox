@@ -111,7 +111,6 @@ rep pat = flip (subRegex (mkRegex pat)) ""
 
 -- Splitting
 split :: String -> String -> [String]
---split pat = splitRegex (mkRegex pat)
 split pat = splitRegex (mkRegex $ "\\s*[" ++ pat ++ "]\\s*")
 
 -- Run system commands.
