@@ -1,52 +1,74 @@
 #!/usr/bin/env runghc
 
-import Control.Conditional (ifM, unless, cond)
-import System.IO           (hPutStrLn, stderr)
-import System.FilePath     ((</>))
-import System.Directory    (doesFileExist)
-import System.Process      (readCreateProcessWithExitCode, shell)
-import System.Exit         (ExitCode(..), die)
-import System.Environment  (getArgs)
-import Text.Regex.PCRE     ((=~))
-import Text.Regex          (mkRegex, splitRegex, subRegex)
-
--- kalamares is both the name of this progaram and of its core function. The
--- program kalamares is basically intended for command line usage. You can
--- simply issue
+-- kalamares is both the name of this progaram and of its core function; also,
+-- there is a type with the same name written with capital 'k'. The program 
+-- kalamares is basically intended for command line usage. You can simply issue
 --   $ runghc kalamares.hs
 -- and things work or compile this file and run it. The function kalamares
 -- basically reads a file and does something.
 
+-- *** Modules used ***
+
+-- Functions deal with condtionals. 
+import Control.Conditional (ifM, unless, cond)
+
+-- System modules.
+import System.IO          (hPutStrLn, stderr)
+import System.FilePath    ((</>))
+import System.Directory   (doesFileExist)
+import System.Process     (readCreateProcessWithExitCode, shell)
+import System.Exit        (ExitCode(..), die)
+import System.Environment (getArgs)
+
+-- Regex modules for regex stuff.
+import Text.Regex.PCRE ((=~))
+import Text.Regex      (mkRegex, splitRegex, subRegex)
+
+-- WARNING: you may need to 'cabal install regex-pcre' first.
+
+
+-- *** The main ***
+
 -- The main is very small and quite simple: just pass the files you want this
 -- program to parse via command-line as arguments.
 main :: IO ()
-main = ifM (fmap null getArgs)
-    (die "no file provided! doing nothing...")
-    (mapM_ kalamares =<< getArgs)
+main = do
+    -- All command line arguments ought be files to parse by kalamares. Anyway,
+    -- if something does not correspond to any file, kalamares informs you.
+    -- Files you want to parse should be written in a comprehensible way: a well
+    -- written file is up to users!
+    kals <- getArgs
+    if null kals
+      -- Throw an exit-failure code if no file is given to kalamares. That
+      -- feature may be useful if the program is embedded in another one. 
+      then die "no file provided: doing nothing..."
+      -- The core action of the program.
+      else mapM_ kalamares kals
 
+
+-- *** Things behind the scenes ***
+    
 -- Kalamares data.
 data Kalamares = FT FilePath FilePath -- rebase action
                | CP FilePath FilePath -- copying things
                | MV FilePath FilePath -- moving things
                | IDK String           -- "I don't know"
 
--- Recognised separators.
+-- All and only the recognised separators.
 seps :: String
 seps = "&>@"
 
--- Turn a string into a kalamares data.
+-- Turn a string into a kalamares data. 
 toKalamares :: String -> Kalamares
 toKalamares str = case (spl seps . rep "#.*$") str of
-    a:b:_ -> let
-                a' = rep "^\\s*|\\s*$" a
-                b' = rep "^\\s*|\\s*$" b
-             in
-                cond [ (elem '&' str, FT a' b')
+    a:b:_ -> let a' = rep "^\\s*|\\s*$" a
+                 b' = rep "^\\s*|\\s*$" b
+             in cond [ (elem '&' str, FT a' b')
                      , (elem '>' str, CP a' b')
                      , (elem '@' str, MV a' b') ]
-    c:[]  -> let c' = rep "^\\s*|\\s*$" c in IDK c'
-    -- Call on an empty string. That case should never occur though. Anyway,
-    -- you are alerted if that happens.
+    [c]   -> let c' = rep "^\\s*|\\s*$" c in IDK c'
+    -- Call on an empty string. That case should never occur though.
+    -- Anyway, you are alerted if that happens.
     []    -> error "toKal applied on an empty string!"
 
 -- kalamares is the heart of this program. It takes a file: if it exists, it is
@@ -105,6 +127,10 @@ kalamares f = ifM (doesFileExist f)
 warn :: String -> IO ()
 warn = hPutStrLn stderr
 
+-- Run system commands.
+run :: String -> IO (ExitCode, String, String)
+run = flip readCreateProcessWithExitCode "" . shell
+
 -- Removing parts from strings using regular expressions.
 rep :: String -> String -> String
 rep pat = flip (subRegex (mkRegex pat)) ""
@@ -112,8 +138,4 @@ rep pat = flip (subRegex (mkRegex pat)) ""
 -- Splitting.
 spl :: String -> String -> [String]
 spl pat = splitRegex (mkRegex $ "\\s*[" ++ pat ++ "]\\s*")
-
--- Run system commands.
-run :: String -> IO (ExitCode, String, String)
-run = flip readCreateProcessWithExitCode "" . shell
 
