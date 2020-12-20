@@ -7,13 +7,15 @@
 -- and things work or compile this file and run it. The function kalamares
 -- basically reads a file and does something.
 
+
 -- *** Modules used ***
 
 -- Functions deal with condtionals. 
-import Control.Conditional (ifM, unless, cond)
+import Control.Conditional (ifM, unless, unlessM, cond)
 
 -- System modules.
-import System.IO          (hPutStrLn, stderr)
+import System.IO
+    (hPutStrLn, stderr, Handle(..), IOMode(..), withFile, hIsEOF, hGetLine)
 import System.FilePath    ((</>))
 import System.Directory   (doesFileExist)
 import System.Process     (readCreateProcessWithExitCode, shell)
@@ -25,7 +27,6 @@ import Text.Regex.PCRE ((=~))
 import Text.Regex      (mkRegex, splitRegex, subRegex)
 
 -- WARNING: you may need to 'cabal install regex-pcre' first.
-
 
 -- *** The main ***
 
@@ -44,7 +45,6 @@ main = do
       then die "no file provided: doing nothing..."
       -- The core action of the program.
       else mapM_ kalamares kals
-
 
 -- *** Things behind the scenes ***
     
@@ -71,61 +71,66 @@ toKalamares str = case (spl seps . rep "#.*$") str of
     -- Anyway, you are alerted if that happens.
     []    -> error "toKal applied on an empty string!"
 
--- kalamares is the heart of this program. It takes a file: if it exists, it is
--- parsed, otherwise you are said it does not exist.
+-- kalamares is the very core function of this program.
 kalamares :: FilePath -> IO ()
-kalamares f = ifM (doesFileExist f)
-    (parse . lines =<< readFile f)
-    (warn $ f ++ " does not exist!")
+kalamares kalFile = ifM (doesFileExist kalFile)
+    -- If the file given to kalamares exists, parse it.
+    (withFile kalFile ReadMode _kalamares)
+    -- Otherwise, alert users it does not exist.
+    (warn $ kalFile ++ " does not exist!")
   where
-    -- The following function is the actual parser: it takes one string at time
-    -- and decides what to do with it.
-    parse :: [String] -> IO ()
-    parse = parseH 1 "" ""
-      where
-        parseH :: Int -> FilePath -> FilePath -> [String] -> IO ()
-        parseH _ _ _ []      = return ()
-        parseH n p q (x:xs)
-            | isNotToParse x = parseH (n+1) p q xs
-            | otherwise      = case toKalamares x of
-                -- Change the bases.
-                FT s t -> parseH (n+1) s t xs
-                -- Copy something into something else.
-                CP a b -> do exec $ "cp -ruv " ++ p </> a ++ " " ++ q </> b
-                             parseH (n+1) p q xs
-                -- Move something into something else.
-                MV a b -> do exec $ "mv " ++ p </> a ++ " " ++ q </> b
-                             parseH (n+1) p q xs
-                -- "I don't know" lines: kalamares alerts you whether there is
-                -- a line it hasn't fully understood; you are also told where
-                -- ambiguous lines lie. 
-                IDK c  -> do warn $ wStart ++ "\'" ++ c ++ "\': "
-                                    ++ "what do you expect me to do?"
-                             parseH (n+1) p q xs
-          where
-            -- Blank lines are not taken into account. Lines whose first non
-            -- blank char is '#' are ignored as well: use them as comments.
-            isNotToParse :: String -> Bool
-            isNotToParse str = str =~ "^\\s*#" || str =~ "^\\s*$"
-            -- Every warning should start with the piece [<file>, line <int>]
-            wStart :: String
-            wStart = "[" ++ f ++ ", line " ++ show n ++ "] "
-            -- exec is the wrapper of unix commands used here.
-            exec :: String -> IO ()
-            exec cmd = do
-                -- Say which command the program is executing.
-                putStrLn $ "[running] " ++ cmd
-                -- Get exit code and error messages may arise.
-                (exitCode, _, errMsg) <- run cmd
-                -- If a non zero exit code is thrown, simply inform users with
-                -- the error message comes from that command and go ahead: 
-                -- never stop because those errors.
-                unless (exitCode == ExitSuccess)
-                    (warn . (++) wStart . rep "\\s*$" $ errMsg)
+    -- The function below is the actual parser: it takes one line at time from
+    -- the file to parse and decides what to do with it.
+    _kalamares :: Handle -> IO ()
+    _kalamares = loop 1 "" ""
+      where 
+        loop :: Int -> FilePath -> FilePath -> Handle -> IO ()
+        loop n p q hdl = unlessM (hIsEOF hdl) $ do
+            ln <- hGetLine hdl
+            -- Blank lines or lines whose first non-' ' is '#' are not taken 
+            -- into any account. Use Blank lines better spatial oragnization of
+            -- your files, and lines starting with '#' as your own notes.
+            if ln =~ "^\\s*$" || ln =~ "^\\s*#"
+              then loop (n+1) p q hdl
+              -- Everything else is potentially parsable: blow up each line into
+              -- a kalamares data.
+              else case toKalamares ln of
+                -- Go ahead with updated bases.
+                FT s t -> loop (n+1) s t hdl
+                -- Otherwise... 
+                r      -> do
+                  case r of
+                    CP a b -> exec kalFile n $
+                        "cp -ru " ++ p </> a ++ " " ++ q </> b
+                    MV a b -> exec kalFile n $
+                        "mv " ++ p </> a ++ " " ++ q </> b
+                    IDK c  -> warn $
+                        wStart kalFile n ++ "\'" ++ c ++ "\': "
+                          ++ "what do you expect me to do?"
+                    _      -> return ()
+                  -- Now move on, pass to the next line...
+                  loop (n+1) p q hdl
 
--- Warn users.
+-- Unix command wrapper.
+exec :: FilePath -> Int -> String -> IO ()
+exec file n cmd = do
+    -- Say which command the program is executing.
+    putStrLn $ " >>> " ++ cmd
+    -- Get exit code and error messages may arise.
+    (exitCode, _, errMsg) <- run cmd
+    -- If a non zero exit code is thrown, simply inform users with
+    -- the error message comes from that command and go ahead: 
+    -- never stop because those errors.
+    unless (exitCode == ExitSuccess) $
+        (warn . (++) (wStart file n) . rep "\\s*$") errMsg
+
+-- Warn users. This kind of communication occurs via standard error channel.
 warn :: String -> IO ()
 warn = hPutStrLn stderr
+
+-- Warning starter.
+wStart :: FilePath -> Int -> String
+wStart f n = "[" ++ f ++ ", line " ++ show n ++ "] "
 
 -- Run system commands.
 run :: String -> IO (ExitCode, String, String)
