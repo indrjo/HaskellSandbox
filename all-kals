@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# move into the dir where this script lies...
+cd $(dirname $0)
+
+# ... and read every "*.kal" file there
+runghc ./kalamares.hs *.kal
+

@@ -1,4 +1,6 @@
-#!/usr/bin/env runghc
+#!/usr/bin/runghc
+
+{-# LANGUAGE Strict #-}
 
 -- kalamares is both the name of this progaram and of its core function; also,
 -- there is a type with the same name written with capital 'k'. The program 
@@ -7,24 +9,31 @@
 -- and things work or compile this file and run it. The function kalamares
 -- basically reads a file and does something.
 
-
 -- *** Modules used ***
 
 -- Functions deal with condtionals. 
-import Control.Conditional (ifM, unless, unlessM, cond)
+import Control.Conditional
+    (ifM, unless, unlessM, cond)
 
 -- System modules.
 import System.IO
-    (hPutStrLn, stderr, Handle(..), IOMode(..), withFile, hIsEOF, hGetLine)
-import System.FilePath    ((</>))
-import System.Directory   (doesFileExist)
-import System.Process     (readCreateProcessWithExitCode, shell)
-import System.Exit        (ExitCode(..), die)
-import System.Environment (getArgs)
+    (hPutStrLn, stderr, Handle, IOMode(..), withFile, hIsEOF, hGetLine)
+import System.FilePath
+    ((</>))
+import System.Directory
+    (doesFileExist)
+import System.Process
+    (readCreateProcessWithExitCode, shell)
+import System.Exit
+    (ExitCode(..), die)
+import System.Environment
+    (getArgs)
 
 -- Regex modules for regex stuff.
-import Text.Regex.PCRE ((=~))
-import Text.Regex      (mkRegex, splitRegex, subRegex)
+import Text.Regex.PCRE
+    ((=~))
+import Text.Regex
+    (mkRegex, splitRegex, subRegex)
 
 -- WARNING: you may need to 'cabal install regex-pcre' first.
 
@@ -69,15 +78,15 @@ toKalamares str = case (spl seps . rep "#.*$") str of
     [c]   -> let c' = rep "^\\s*|\\s*$" c in IDK c'
     -- Call on an empty string. That case should never occur though.
     -- Anyway, you are alerted if that happens.
-    []    -> error "toKal applied on an empty string!"
+    []    -> error "application on an empty string!"
 
 -- kalamares is the very core function of this program.
 kalamares :: FilePath -> IO ()
-kalamares kalFile = ifM (doesFileExist kalFile)
+kalamares kalF = ifM (doesFileExist kalF)
     -- If the file given to kalamares exists, parse it.
-    (withFile kalFile ReadMode _kalamares)
+    (withFile kalF ReadMode _kalamares)
     -- Otherwise, alert users it does not exist.
-    (warn $ kalFile ++ " does not exist!")
+    (warn $ kalF ++ " does not exist!")
   where
     -- The function below is the actual parser: it takes one line at time from
     -- the file to parse and decides what to do with it.
@@ -95,21 +104,17 @@ kalamares kalFile = ifM (doesFileExist kalFile)
               -- Everything else is potentially parsable: blow up each line into
               -- a kalamares data.
               else case toKalamares ln of
-                -- Go ahead with updated bases.
                 FT s t -> loop (n+1) s t hdl
-                -- Otherwise... 
-                r      -> do
-                  case r of
-                    CP a b -> exec kalFile n $
-                        "cp -ru " ++ p </> a ++ " " ++ q </> b
-                    MV a b -> exec kalFile n $
-                        "mv " ++ p </> a ++ " " ++ q </> b
-                    IDK c  -> warn $
-                        wStart kalFile n ++ "\'" ++ c ++ "\': "
-                          ++ "what do you expect me to do?"
-                    _      -> return ()
-                  -- Now move on, pass to the next line...
-                  loop (n+1) p q hdl
+                CP a b -> do
+                    exec kalF n $ "cp -ru " ++ p </> a ++ " " ++ q </> b
+                    loop (n+1) p q hdl
+                MV a b -> do
+                    exec kalF n $ "mv " ++ p </> a ++ " " ++ q </> b
+                    loop (n+1) p q hdl
+                IDK c  -> do
+                    warn $ wStart kalF n ++ "\'" ++ c ++ "\': "
+                           ++ "what do you expect me to do?"
+                    loop (n+1) p q hdl
 
 -- Unix command wrapper.
 exec :: FilePath -> Int -> String -> IO ()
@@ -122,7 +127,7 @@ exec file n cmd = do
     -- the error message comes from that command and go ahead: 
     -- never stop because those errors.
     unless (exitCode == ExitSuccess) $
-        (warn . (++) (wStart file n) . rep "\\s*$") errMsg
+      (warn . (++) (wStart file n) . rep "\\s*$") errMsg
 
 -- Warn users. This kind of communication occurs via standard error channel.
 warn :: String -> IO ()
