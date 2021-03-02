@@ -4,5 +4,4 @@
 cd $(dirname $0)
 
 # ... and read every "*.kal" file there
-runghc ./kalamares.hs *.kal
-
+./kalamares *.kal
