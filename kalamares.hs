@@ -47,15 +47,15 @@ main = do
     -- if something does not correspond to any file, kalamares informs you.
     -- Files you want to parse should be written in a comprehensible way: a well
     -- written file is up to users!
-    kals <- getArgs
-    if null kals
+    filesToParse <- getArgs
+    if null filesToParse
       -- Throw an exit-failure code if no file is given to kalamares. That
       -- feature may be useful if the program is embedded in another one. 
       then die "no file provided: doing nothing..."
       -- The core action of the program.
-      else mapM_ kalamares kals
+      else mapM_ kalamares filesToParse
 
--- *** Things behind the scenes ***
+-- *** The real actors ***
     
 -- Kalamares data.
 data Kalamares = FT FilePath FilePath -- rebase action
@@ -116,6 +116,8 @@ kalamares kalF = ifM (doesFileExist kalF)
                            ++ "what do you expect me to do?"
                     loop (n+1) p q hdl
 
+-- *** Smaller functions ***
+
 -- Unix command wrapper.
 exec :: FilePath -> Int -> String -> IO ()
 exec file n cmd = do
@@ -128,6 +130,10 @@ exec file n cmd = do
     -- never stop because those errors.
     unless (exitCode == ExitSuccess) $
       (warn . (++) (wStart file n) . rep "\\s*$") errMsg
+  where
+    -- Run system commands.
+    run :: String -> IO (ExitCode, String, String)
+    run = flip readCreateProcessWithExitCode "" . shell
 
 -- Warn users. This kind of communication occurs via standard error channel.
 warn :: String -> IO ()
@@ -136,10 +142,6 @@ warn = hPutStrLn stderr
 -- Warning starter.
 wStart :: FilePath -> Int -> String
 wStart f n = "[" ++ f ++ ", line " ++ show n ++ "] "
-
--- Run system commands.
-run :: String -> IO (ExitCode, String, String)
-run = flip readCreateProcessWithExitCode "" . shell
 
 -- Removing parts from strings using regular expressions.
 rep :: String -> String -> String
