@@ -1,6 +1,6 @@
 
 # Lines starting with '#' are treated as comments: they are not taken into
-# account by program. Use them for your own notes throughout '*.kal' files.
+# account by program; use them for your own notes throughout '*.kal' files.
 # Spaces and blank lines are not influent as well: use them to visually
 # organize your contents.
 

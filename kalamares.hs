@@ -145,7 +145,7 @@ wStart f n = "[" ++ f ++ ", line " ++ show n ++ "] "
 
 -- Removing parts from strings using regular expressions.
 rep :: String -> String -> String
-rep pat = flip (subRegex (mkRegex pat)) ""
+rep pat = flip (subRegex $ mkRegex pat) ""
 
 -- Splitting.
 spl :: String -> String -> [String]
