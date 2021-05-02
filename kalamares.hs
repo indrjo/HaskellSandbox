@@ -1,21 +1,9 @@
-#!/usr/bin/runghc
-
 {-# LANGUAGE Strict #-}
-
--- kalamares is both the name of this progaram and of its core function; also,
--- there is a type with the same name written with capital 'k'. The program 
--- kalamares is basically intended for command line usage. You can simply issue
---   $ runghc kalamares.hs
--- and things work or compile this file and run it. The function kalamares
--- basically reads a file and does something.
 
 -- *** Modules used ***
 
--- Functions deal with condtionals. 
 import Control.Conditional
     (ifM, unless, unlessM, cond)
-
--- System modules.
 import System.IO
     (hPutStrLn, stderr, Handle, IOMode(..), withFile, hIsEOF, hGetLine)
 import System.FilePath
@@ -28,8 +16,6 @@ import System.Exit
     (ExitCode(..), die)
 import System.Environment
     (getArgs)
-
--- Regex modules for regex stuff.
 import Text.Regex.PCRE
     ((=~))
 import Text.Regex
@@ -56,29 +42,6 @@ main = do
       else mapM_ kalamares filesToParse
 
 -- *** The real actors ***
-    
--- Kalamares data.
-data Kalamares = FT FilePath FilePath -- rebase action
-               | CP FilePath FilePath -- copying things
-               | MV FilePath FilePath -- moving things
-               | IDK String           -- "I don't know"
-
--- All and only the recognised separators.
-seps :: String
-seps = "&>@"
-
--- Turn a string into a kalamares data. 
-toKalamares :: String -> Kalamares
-toKalamares str = case (spl seps . rep "#.*$") str of
-    a:b:_ -> let a' = rep "^\\s*|\\s*$" a
-                 b' = rep "^\\s*|\\s*$" b
-             in cond [ (elem '&' str, FT a' b')
-                     , (elem '>' str, CP a' b')
-                     , (elem '@' str, MV a' b') ]
-    [c]   -> let c' = rep "^\\s*|\\s*$" c in IDK c'
-    -- Call on an empty string. That case should never occur though.
-    -- Anyway, you are alerted if that happens.
-    []    -> error "application on an empty string!"
 
 -- kalamares is the very core function of this program.
 kalamares :: FilePath -> IO ()
@@ -115,6 +78,29 @@ kalamares kalF = ifM (doesFileExist kalF)
                     warn $ wStart kalF n ++ "\'" ++ c ++ "\': "
                            ++ "what do you expect me to do?"
                     loop (n+1) p q hdl
+
+-- Kalamares data.
+data Kalamares = FT FilePath FilePath -- rebase action
+               | CP FilePath FilePath -- copying things
+               | MV FilePath FilePath -- moving things
+               | IDK String           -- "I don't know"
+
+-- All and only the recognised separators.
+seps :: String
+seps = "&>@"
+
+-- Turn a string into a kalamares data. 
+toKalamares :: String -> Kalamares
+toKalamares str = case kalParse str of
+    a:b:_ -> cond [ (elem '&' str, FT a b)
+                  , (elem '>' str, CP a b)
+                  , (elem '@' str, MV a b)
+                  ]
+    [c]   -> IDK c
+    []    -> error "application on an empty string!"
+  where
+    kalParse :: String -> [String]
+    kalParse = map (rep "^\\s*|\\s*$") . spl seps . rep "#.*$"
 
 -- *** Smaller functions ***
 
